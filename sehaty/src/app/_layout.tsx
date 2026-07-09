@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { I18nManager } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -44,10 +43,8 @@ export default function RootLayout() {
     JetBrainsMono_600SemiBold,
   });
 
-  useEffect(() => {
-    if (loaded) SplashScreen.hideAsync();
-  }, [loaded]);
-
+  // Splash is hidden by AppProvider once the SQLite snapshot has hydrated,
+  // so the first visible frame already reflects persisted state.
   if (!loaded) return null;
 
   return (

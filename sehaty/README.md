@@ -49,9 +49,10 @@ src/
     water.tsx  mood.tsx  quick-log.tsx
   components/              # reusable library (see below)
   theme/tokens.ts          # design tokens ported 1:1 from the design
-  state/store.tsx          # in-memory app store (the daily loop shares state here)
+  state/store.tsx          # app store: hydrates from SQLite, write-through on mutations
+  db/                      # SQLite layer: full 14-table schema + data access
   data/                    # domain types + realistic seed data from the design
-  services/                # ai.ts, camera.ts  ← the "wire real AI later" seams
+  services/                # ai.ts (proxy client + mock fallback), camera.ts
 ```
 
 ### Component library (`src/components`)
@@ -66,26 +67,40 @@ src/
 shadows). The color-distribution rule from the brief is honored: ~72% dark background,
 ~16% text, ~8% primary green (`#CEFD82` = "your data"), ~4% purple (`#6D4AFF` = "the AI").
 
-## AI + camera seams (plugging in a real backend later)
+## AI: the proxy client + mock fallback
 
-Screens never call a model or the camera directly — they go through:
+Screens never call a model directly — they go through **`src/services/ai.ts`**
+(`analyzeMealText`, `analyzeMealImage`, `sendChat`). It talks to the **sehaty-proxy**
+(the `/proxy` project at the repo root, deployed on the VPS — that's where the real
+MiniMax key lives). Configure the app with:
 
-- **`src/services/ai.ts`** — `analyzeMealText`, `analyzeMealImage`, `sendChat`. Today these
-  are deterministic mocks returning design-accurate data. Populate `aiConfig`
-  (`EXPO_PUBLIC_AI_ENDPOINT` / `EXPO_PUBLIC_AI_KEY` / `EXPO_PUBLIC_AI_MODEL`) and implement
-  `callModel()` against Claude (Anthropic Messages API) or MiniMax — the screens don't change.
-- **`src/services/camera.ts`** — `captureImage(source)`. Mock returns a placeholder; swap in
-  `expo-image-picker` / `expo-camera` and the meal + chat flows keep working.
+```
+EXPO_PUBLIC_AI_BASE_URL=https://ai.yourdomain.com
+EXPO_PUBLIC_AI_TOKEN=<APP_TOKEN from the proxy .env>
+```
+
+Unset — or on any live-call failure (offline, proxy down) — every function falls back
+to deterministic design-accurate mocks, so the app always works. Each live request
+carries a "context card" (latest weekly memory summary + last-7-days raw rows) built
+by `src/db/buildContextCard()`.
+
+**`src/services/camera.ts`** — `captureImage(source)` is still a mock returning a
+placeholder; swap in `expo-image-picker` / `expo-camera` and the meal + chat flows
+keep working (real `file://` URIs are already read as base64 for the vision endpoints).
 
 ## State & persistence
 
-`src/state/store.tsx` is an in-memory React context. Logging a meal / water / mood updates
-the Home dashboard live. There is **no persistence yet** — replace the provider internals
-with AsyncStorage (or SQLite) to make data survive restarts.
+`src/state/store.tsx` hydrates once from SQLite at launch (`src/db`, via `expo-sqlite`)
+and write-throughs every mutation; in-memory state stays the render source of truth.
+The schema in `src/db/schema.ts` is the **full** build-prompt schema (14 tables) —
+including tables whose screens come in later phases (medical, gym, workouts, travel,
+weekly memory) — so future phases add queries, not migrations. Daily-loop reads are
+scoped to today's local date; a first-run seed plants the design's demo day, which
+naturally ages out at midnight. On web the DB layer no-ops and the app runs in-memory.
 
 ## Notes
 
-- The `index.tsx` entry routes to onboarding on first run; completing onboarding flips an
-  in-memory flag and lands on the tabs. (With persistence added, gate this on stored state.)
+- The `index.tsx` entry routes to onboarding on first run; completing onboarding persists
+  the flag (`app_meta.onboarded`), so restarts land straight on the tabs.
 - `EXPO_PUBLIC_*` names are intentional: Expo only inlines env vars with that prefix into the
-  client bundle. Keep truly secret keys behind your own proxy rather than shipping them.
+  client bundle. Only the proxy URL + shared token ship in the app — never the MiniMax key.

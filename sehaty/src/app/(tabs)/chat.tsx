@@ -19,7 +19,7 @@ import type { ChatMessage, Meal } from '@/data/types';
 import { color, font, radius, space, tint } from '@/theme/tokens';
 
 export default function Chat() {
-  const { chat, addChatMessage, addMeal } = useApp();
+  const { chat, addChatMessage, addMeal, addWater, setMood } = useApp();
   const [text, setText] = useState('');
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -32,10 +32,21 @@ export default function Chat() {
     if (img) setPendingImage(img.uri);
   };
 
-  const handleReply = async (userText: string, hasImage: boolean) => {
+  const handleReply = async (userText: string, hasImage: boolean, imageUri?: string) => {
     setBusy(true);
     try {
-      const reply = await sendChat(userText, hasImage);
+      const history = chat
+        .filter((m) => m.text)
+        .slice(-10)
+        .map((m) => ({ role: m.role, content: m.text as string }));
+      const reply = await sendChat(userText, hasImage, history, imageUri);
+
+      // Dispatch non-meal actions the model extracted (water, mood, …).
+      for (const a of reply.actions ?? []) {
+        if (a.type === 'water_log' && a.amount_ml > 0) addWater(a.amount_ml, '💧');
+        else if (a.type === 'mood_log' && a.score >= 1 && a.score <= 5) setMood(a.score as 1 | 2 | 3 | 4 | 5);
+      }
+
       if (reply.meal) {
         const meal: Meal = {
           id: `chat-${Date.now()}`,
@@ -69,7 +80,7 @@ export default function Chat() {
     setText('');
     setPendingImage(null);
     scrollToEnd();
-    await handleReply(t || 'صورة', Boolean(img));
+    await handleReply(t || 'صورة', Boolean(img), img ?? undefined);
   };
 
   return (
