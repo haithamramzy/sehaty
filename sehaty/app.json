@@ -14,6 +14,7 @@
       "supportsTablet": false
     },
     "android": {
+      "package": "com.haitham.sehaty",
       "adaptiveIcon": {
         "backgroundColor": "#0F0F11",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
