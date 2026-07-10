@@ -83,7 +83,7 @@ export default function GymResult() {
                     {i + 1}
                   </Txt>
                 </View>
-                <Txt size={13} c={color.textSecondary} lh={20} style={{ flex: 1 }}>
+                <Txt size={13} c={color.textSecondary} style={{ flex: 1 }}>
                   {s}
                 </Txt>
               </View>

@@ -37,7 +37,7 @@ export function OnboardScaffold({ step, total = 5, title, subtitle, ctaLabel, on
       </View>
 
       <View style={styles.body}>
-        <Txt weight="900" size={26} lh={34}>
+        <Txt weight="900" size={26}>
           {title}
         </Txt>
         {subtitle && (

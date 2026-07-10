@@ -115,7 +115,7 @@ export default function Reports() {
           <Txt weight="700" size={14} style={{ marginBottom: 4 }}>
             {r.recommendation.title}
           </Txt>
-          <Txt size={12} c={color.textTertiary} lh={19}>
+          <Txt size={12} c={color.textTertiary}>
             {r.recommendation.body}
           </Txt>
         </View>

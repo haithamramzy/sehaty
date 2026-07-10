@@ -133,7 +133,7 @@ export default function Log() {
 function NavBtn({ glyph, onPress }: { glyph: string; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.navBtn, { opacity: pressed ? 0.6 : 1 }]}>
-      <Txt size={20} weight="700" c={color.textSecondary} lh={22}>
+      <Txt size={20} weight="700" c={color.textSecondary}>
         {glyph}
       </Txt>
     </Pressable>

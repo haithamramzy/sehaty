@@ -20,7 +20,7 @@ export default function Welcome() {
           <Icon name="heart" size={48} color={color.onPrimary} />
         </LinearGradient>
 
-        <Txt weight="900" size={36} lh={44}>
+        <Txt weight="900" size={36}>
           أهلاً بيك{'\n'}في صحّتي
         </Txt>
         <Txt size={16} c={color.textTertiary} lh={27} style={{ marginTop: space.lg }}>

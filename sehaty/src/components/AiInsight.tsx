@@ -55,7 +55,7 @@ export function AiInsight({ text, children, tone = 'ai', label, compact = false 
             </Txt>
           )}
           {text ? (
-            <Txt size={13} c={color.textHigh} lh={20}>
+            <Txt size={13} c={color.textHigh}>
               {text}
             </Txt>
           ) : (

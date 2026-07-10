@@ -511,7 +511,7 @@ function StaticRow({ text }: { text: string }) {
   return (
     <View style={styles.row}>
       <Icon name="check" size={16} color={color.primary} />
-      <Txt size={13} c={color.textSecondary} style={{ flex: 1 }} lh={20}>
+      <Txt size={13} c={color.textSecondary} style={{ flex: 1 }}>
         {text}
       </Txt>
     </View>

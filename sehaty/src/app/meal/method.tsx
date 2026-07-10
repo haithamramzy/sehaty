@@ -64,7 +64,7 @@ function MethodCard({
       <Txt weight="700" size={15}>
         {title}
       </Txt>
-      <Txt center size={11} c={color.textMuted} lh={17}>
+      <Txt center size={11} c={color.textMuted}>
         {sub}
       </Txt>
     </LinearGradient>

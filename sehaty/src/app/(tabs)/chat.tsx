@@ -198,7 +198,7 @@ function Bubble({ msg }: { msg: ChatMessage }) {
           )}
           {msg.text && (
             <View style={styles.userBubble}>
-              <Txt size={13} weight="600" c={color.onPrimary} lh={20}>
+              <Txt size={13} weight="600" c={color.onPrimary}>
                 {msg.text}
               </Txt>
             </View>
@@ -214,7 +214,7 @@ function Bubble({ msg }: { msg: ChatMessage }) {
       <View style={styles.aiCol}>
         {msg.text && (
           <View style={styles.aiBubble}>
-            <Txt size={13} c={color.textHigh} lh={21}>
+            <Txt size={13} c={color.textHigh}>
               {msg.text}
             </Txt>
           </View>

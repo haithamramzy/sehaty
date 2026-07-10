@@ -25,7 +25,7 @@ export default function MealWrite() {
         <TopBar title="اكتب وجبتك" right={<IconButton name="camera" />} />
 
         <View style={styles.body}>
-          <Txt weight="900" size={22} lh={30}>
+          <Txt weight="900" size={22}>
             اكتب اللي اكلته{'\n'}بشكل طبيعي
           </Txt>
           <Txt size={13} c={color.textTertiary} style={{ marginTop: 6, marginBottom: space.lg }}>

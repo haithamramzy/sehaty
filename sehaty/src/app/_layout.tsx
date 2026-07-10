@@ -1,5 +1,5 @@
 import React from 'react';
-import { I18nManager, ScrollView, Text } from 'react-native';
+import { I18nManager, Platform, ScrollView, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
@@ -26,6 +26,12 @@ import { color } from '@/theme/tokens';
 if (!I18nManager.isRTL) {
   I18nManager.allowRTL(true);
   I18nManager.forceRTL(true);
+}
+// react-native-web doesn't flip the document; set it explicitly so text
+// shaping, punctuation and scroll direction are truly RTL in the browser.
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  document.documentElement.setAttribute('dir', 'rtl');
+  document.documentElement.setAttribute('lang', 'ar');
 }
 
 SplashScreen.preventAutoHideAsync();
@@ -96,7 +102,9 @@ export default function RootLayout() {
             screenOptions={{
               headerShown: false,
               contentStyle: { backgroundColor: color.bg },
-              animation: 'slide_from_right',
+              // Slide transitions stall mid-frame on web, leaving two screens
+              // ghost-overlapped (clipped-looking text). Web gets instant cuts.
+              animation: Platform.OS === 'web' ? 'none' : 'slide_from_right',
             }}
           >
             <Stack.Screen name="index" />
@@ -111,8 +119,14 @@ export default function RootLayout() {
             <Stack.Screen name="export-report" />
             <Stack.Screen name="settings" />
             <Stack.Screen name="compare" />
-            <Stack.Screen name="mood" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="quick-log" options={{ presentation: 'transparentModal', animation: 'fade' }} />
+            <Stack.Screen
+              name="mood"
+              options={{ presentation: 'modal', animation: Platform.OS === 'web' ? 'none' : 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+              name="quick-log"
+              options={{ presentation: 'transparentModal', animation: Platform.OS === 'web' ? 'none' : 'fade' }}
+            />
           </Stack>
         </AppProvider>
         </SafeAreaProvider>
