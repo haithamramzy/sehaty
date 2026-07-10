@@ -3,7 +3,7 @@ name: Build صحّتي APK
 on:
   workflow_dispatch:
   push:
-    branches: [feat/sehaty-app, main]
+    branches: [feat/sehaty-app, main, master]
     paths:
       - 'sehaty/**'
       - '.github/workflows/build-apk.yml'
