@@ -11,8 +11,14 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import * as SplashScreen from 'expo-splash-screen';
 
 import * as db from '@/db';
-import { defaultProfile, seedChat, seedMeals, seedWater } from '@/data/mock';
-import type { ChatMessage, Meal, MoodLevel, UserProfile, WaterEntry } from '@/data/types';
+import {
+  defaultEmergencyCard, defaultProfile, defaultSettings, seedChat, seedEquipment, seedMeals,
+  seedMeds, seedSleep, seedWater, seedWorkoutPlan,
+} from '@/data/mock';
+import type {
+  AppSettings, ChatMessage, EmergencyCard, GymEquipment, Meal, MedIntake, Medication,
+  MoodLevel, SleepEntry, UserProfile, WaterEntry, WorkoutDay,
+} from '@/data/types';
 import type { MealAnalysis } from '@/services/ai';
 
 let idCounter = 1000;
@@ -27,9 +33,18 @@ interface AppState {
   chat: ChatMessage[];
   /** In-flight meal analysis handed from the analyzing screen to the result screen. */
   draftMeal: MealAnalysis | null;
+  meds: Medication[];
+  todayIntakes: MedIntake[];
+  sleepWeek: SleepEntry[];
+  equipment: GymEquipment[];
+  workoutPlan: WorkoutDay[];
+  emergencyCard: EmergencyCard;
+  settings: AppSettings;
   // derived
   caloriesConsumed: number;
   waterConsumedMl: number;
+  /** Last night's sleep entry (most recent), if any. */
+  lastSleep: SleepEntry | null;
   // actions
   completeOnboarding: (patch: Partial<UserProfile>) => void;
   addMeal: (meal: Omit<Meal, 'id'>) => void;
@@ -37,6 +52,15 @@ interface AppState {
   setMood: (mood: MoodLevel) => void;
   addChatMessage: (msg: Omit<ChatMessage, 'id'>) => void;
   setDraftMeal: (draft: MealAnalysis | null) => void;
+  addMedication: (med: Omit<Medication, 'id'>) => void;
+  setMedActive: (id: string, active: boolean) => void;
+  confirmDose: (med: Medication) => void;
+  logSleep: (patch: Omit<SleepEntry, 'id' | 'date' | 'source'>) => void;
+  addEquipment: (eq: Omit<GymEquipment, 'id'>) => GymEquipment;
+  upsertWorkoutDay: (day: WorkoutDay) => void;
+  saveEmergencyCard: (card: EmergencyCard) => void;
+  updateSettings: (patch: Partial<AppSettings>) => void;
+  updateProfile: (patch: Partial<UserProfile>) => void;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -48,6 +72,13 @@ function nowHHMM(): string {
   return `${hh}:${mm}`;
 }
 
+function todayLocalDate(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
@@ -57,6 +88,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [mood, setMoodState] = useState<MoodLevel | null>(4);
   const [chat, setChat] = useState<ChatMessage[]>(seedChat);
   const [draftMeal, setDraftMeal] = useState<MealAnalysis | null>(null);
+  const [meds, setMeds] = useState<Medication[]>(seedMeds);
+  const [todayIntakes, setTodayIntakes] = useState<MedIntake[]>([]);
+  const [sleepWeek, setSleepWeek] = useState<SleepEntry[]>(seedSleep);
+  const [equipment, setEquipment] = useState<GymEquipment[]>(seedEquipment);
+  const [workoutPlan, setWorkoutPlan] = useState<WorkoutDay[]>(seedWorkoutPlan);
+  const [emergencyCard, setEmergencyCard] = useState<EmergencyCard>(defaultEmergencyCard);
+  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +107,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setWater(snap.water);
         setMoodState(snap.mood);
         setChat(snap.chat);
+        if (snap.meds.length) setMeds(snap.meds);
+        setTodayIntakes(snap.todayIntakes);
+        if (snap.sleepWeek.length) setSleepWeek(snap.sleepWeek);
+        if (snap.equipment.length) setEquipment(snap.equipment);
+        if (snap.workoutPlan.length) setWorkoutPlan(snap.workoutPlan);
+        if (snap.emergencyCard) setEmergencyCard(snap.emergencyCard);
+        if (snap.settings) setSettings(snap.settings);
       })
       .catch((e) => console.warn('[db] hydrate failed, running in-memory:', e))
       .finally(() => {
@@ -112,9 +157,81 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setChat((prev) => [...prev, full]);
   }, []);
 
+  const addMedication = useCallback((med: Omit<Medication, 'id'>) => {
+    const full: Medication = { ...med, id: nextId() };
+    db.upsertMedication(full);
+    setMeds((prev) => [full, ...prev]);
+  }, []);
+
+  const setMedActive = useCallback((id: string, active: boolean) => {
+    setMeds((prev) =>
+      prev.map((m) => {
+        if (m.id !== id) return m;
+        const next = { ...m, active, endDate: active ? undefined : todayLocalDate() };
+        db.upsertMedication(next);
+        return next;
+      }),
+    );
+  }, []);
+
+  const confirmDose = useCallback((med: Medication) => {
+    const intake: MedIntake = {
+      id: nextId(), medId: med.id, medName: med.name, date: todayLocalDate(), at: nowHHMM(),
+    };
+    db.insertMedIntake(intake);
+    setTodayIntakes((prev) => [...prev, intake]);
+  }, []);
+
+  const logSleep = useCallback((patch: Omit<SleepEntry, 'id' | 'date' | 'source'>) => {
+    const date = todayLocalDate();
+    const entry: SleepEntry = { ...patch, id: `sl-${date}`, date, source: 'manual' };
+    db.upsertSleep(entry);
+    setSleepWeek((prev) => [entry, ...prev.filter((s) => s.date !== date)]);
+  }, []);
+
+  const addEquipment = useCallback((eq: Omit<GymEquipment, 'id'>) => {
+    const full: GymEquipment = { ...eq, id: nextId() };
+    db.upsertEquipment(full);
+    setEquipment((prev) => [full, ...prev]);
+    return full;
+  }, []);
+
+  const upsertWorkoutDay = useCallback((day: WorkoutDay) => {
+    db.upsertWorkoutDay(day);
+    setWorkoutPlan((prev) => {
+      const rest = prev.filter((d) => d.dayOfWeek !== day.dayOfWeek);
+      return [...rest, day].sort((a, b) => a.dayOfWeek - b.dayOfWeek);
+    });
+  }, []);
+
+  const saveEmergencyCard = useCallback((card: EmergencyCard) => {
+    db.saveEmergencyCard(card);
+    setEmergencyCard(card);
+  }, []);
+
+  const updateSettings = useCallback((patch: Partial<AppSettings>) => {
+    setSettings((prev) => {
+      const next = { ...prev, ...patch };
+      db.saveSettings(next);
+      return next;
+    });
+  }, []);
+
+  const updateProfile = useCallback((patch: Partial<UserProfile>) => {
+    setProfile((p) => {
+      const next = { ...p, ...patch };
+      db.saveProfile(next, true);
+      return next;
+    });
+  }, []);
+
   const caloriesConsumed = useMemo(
     () => meals.reduce((sum, m) => sum + m.kcal, 0),
     [meals],
+  );
+  const lastSleep = useMemo(
+    () => (sleepWeek.length ? [...sleepWeek].sort((a, b) => b.date.localeCompare(a.date))[0] : null),
+    [sleepWeek],
   );
   const waterConsumedMl = useMemo(
     () => water.reduce((sum, w) => sum + w.ml, 0),
@@ -130,18 +247,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       mood,
       chat,
       draftMeal,
+      meds,
+      todayIntakes,
+      sleepWeek,
+      equipment,
+      workoutPlan,
+      emergencyCard,
+      settings,
       caloriesConsumed,
       waterConsumedMl,
+      lastSleep,
       completeOnboarding,
       addMeal,
       addWater,
       setMood,
       addChatMessage,
       setDraftMeal,
+      addMedication,
+      setMedActive,
+      confirmDose,
+      logSleep,
+      addEquipment,
+      upsertWorkoutDay,
+      saveEmergencyCard,
+      updateSettings,
+      updateProfile,
     }),
     [
       profile, onboarded, meals, water, mood, chat, draftMeal, caloriesConsumed, waterConsumedMl,
+      meds, todayIntakes, sleepWeek, equipment, workoutPlan, emergencyCard, settings, lastSleep,
       completeOnboarding, addMeal, addWater, setMood, addChatMessage,
+      addMedication, setMedActive, confirmDose, logSleep, addEquipment, upsertWorkoutDay,
+      saveEmergencyCard, updateSettings, updateProfile,
     ],
   );
 

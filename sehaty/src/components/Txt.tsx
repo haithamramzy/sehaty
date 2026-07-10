@@ -36,11 +36,17 @@ export function Txt({
       : font.mono
     : cairoForWeight[weight];
 
+  // Cairo's glyphs are tall (Arabic ascenders/descenders + marks). Android
+  // clips them when a line box is tighter than ~1.7× the font size, which
+  // reads as "half-missing letters" on device. Give every Cairo run a safe
+  // default line height (callers can still pass a tighter `lh` knowingly).
+  const lineHeight = lh ?? Math.round(size * (mono ? 1.35 : 1.7));
+
   const base: TextStyle = {
     fontFamily: family,
     fontSize: size,
     color: c,
-    ...(lh ? { lineHeight: lh } : null),
+    lineHeight,
     ...(center ? { textAlign: 'center' } : null),
     ...(mono ? { fontVariant: ['tabular-nums'] } : null),
   };

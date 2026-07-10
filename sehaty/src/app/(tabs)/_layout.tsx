@@ -13,6 +13,7 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="index" />
+      <Tabs.Screen name="log" />
       <Tabs.Screen name="chat" />
       <Tabs.Screen name="reports" />
     </Tabs>

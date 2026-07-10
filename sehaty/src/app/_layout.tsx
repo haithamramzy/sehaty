@@ -103,7 +103,14 @@ export default function RootLayout() {
             <Stack.Screen name="onboarding" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="meal" />
+            <Stack.Screen name="gym" />
             <Stack.Screen name="water" />
+            <Stack.Screen name="sleep" />
+            <Stack.Screen name="meds" />
+            <Stack.Screen name="medical" />
+            <Stack.Screen name="export-report" />
+            <Stack.Screen name="settings" />
+            <Stack.Screen name="compare" />
             <Stack.Screen name="mood" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
             <Stack.Screen name="quick-log" options={{ presentation: 'transparentModal', animation: 'fade' }} />
           </Stack>

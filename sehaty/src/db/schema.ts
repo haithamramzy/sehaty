@@ -7,7 +7,7 @@
  * Dates: `date` columns are local 'YYYY-MM-DD'; `ts` columns are epoch millis.
  */
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const CREATE_TABLES: string[] = [
   `CREATE TABLE IF NOT EXISTS user_profile (
@@ -137,6 +137,15 @@ export const CREATE_TABLES: string[] = [
     key TEXT PRIMARY KEY,
     value TEXT
   )`,
+
+  `CREATE TABLE IF NOT EXISTS med_intake_logs (
+    id TEXT PRIMARY KEY,
+    med_id TEXT NOT NULL,
+    med_name TEXT NOT NULL,
+    ts INTEGER NOT NULL,
+    date TEXT NOT NULL,
+    at TEXT NOT NULL
+  )`,
 ];
 
 export const CREATE_INDEXES: string[] = [
@@ -146,4 +155,5 @@ export const CREATE_INDEXES: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_sleep_logs_date ON sleep_logs(date)`,
   `CREATE INDEX IF NOT EXISTS idx_chat_messages_ts ON chat_messages(ts)`,
   `CREATE INDEX IF NOT EXISTS idx_medical_records_date ON medical_records(date)`,
+  `CREATE INDEX IF NOT EXISTS idx_med_intake_logs_date ON med_intake_logs(date)`,
 ];

@@ -2,7 +2,10 @@
  * Realistic sample data lifted from the design (هيثم's day, 9 يوليو).
  * Used to seed the in-memory store so every screen shows real-looking content.
  */
-import type { ChatMessage, Meal, UserProfile, WaterEntry } from './types';
+import type {
+  AppSettings, ChatMessage, EmergencyCard, GymEquipment, Meal, MedicalRecord, Medication,
+  SleepEntry, UserProfile, WaterEntry, WorkoutDay,
+} from './types';
 
 export const defaultProfile: UserProfile = {
   name: 'هيثم',
@@ -118,6 +121,93 @@ export const onboardingGoals = [
   { emoji: '🚭', label: 'تقليل التدخين' },
   { emoji: '🧠', label: 'صحة نفسية' },
 ];
+
+export const seedMeds: Medication[] = [
+  { id: 'med1', name: 'فيتامين D', dosage: '1000 وحدة', kind: 'مكمل', timing: 'مع الغدا · 14:00', startDate: '2026-06-01', active: true },
+  { id: 'med2', name: 'أوميجا 3', dosage: 'كبسولة', kind: 'مكمل', timing: 'بعد العشا · 21:00', startDate: '2026-06-15', active: true },
+  { id: 'med3', name: 'مسكن — Panadol Extra', dosage: 'قرص', kind: 'دواء', timing: 'حسب الحاجة', startDate: '2026-05-02', endDate: '2026-05-09', active: false },
+];
+
+export const seedSleep: SleepEntry[] = [
+  { id: 'sl-2026-07-09', date: '2026-07-09', hours: 5.2, quality: 3, lastCoffeeTime: '20:30', lastCigaretteTime: undefined, source: 'manual' },
+  { id: 'sl-2026-07-08', date: '2026-07-08', hours: 6.1, quality: 4, lastCoffeeTime: '18:00', source: 'manual' },
+  { id: 'sl-2026-07-07', date: '2026-07-07', hours: 5.8, quality: 3, lastCoffeeTime: '19:15', source: 'manual' },
+  { id: 'sl-2026-07-06', date: '2026-07-06', hours: 7.2, quality: 5, lastCoffeeTime: '16:30', source: 'manual' },
+  { id: 'sl-2026-07-05', date: '2026-07-05', hours: 6.4, quality: 4, source: 'manual' },
+  { id: 'sl-2026-07-04', date: '2026-07-04', hours: 5.5, quality: 2, lastCoffeeTime: '21:00', source: 'manual' },
+  { id: 'sl-2026-07-03', date: '2026-07-03', hours: 6.8, quality: 4, source: 'manual' },
+];
+
+export const seedMedicalRecords: MedicalRecord[] = [
+  {
+    id: 'rec1', date: '2026-07-07', type: 'تحليل دم', title: 'تحليل دم شامل',
+    center: 'معمل المختبر', status: 'تحتاج انتباه',
+    results: [
+      { name: 'فيتامين D', value: '22 ng/mL', normalRange: '30–100', flag: 'منخفض' },
+      { name: 'كوليسترول كلي', value: '212 mg/dL', normalRange: '< 200', flag: 'مرتفع طفيف' },
+      { name: 'سكر صايم', value: '92 mg/dL', normalRange: '70–100' },
+      { name: 'هيموجلوبين', value: '15.1 g/dL', normalRange: '13.5–17.5' },
+    ],
+    notes: 'ينصح بمكمل فيتامين D وإعادة التحليل بعد 3 شهور.',
+  },
+  {
+    id: 'rec2', date: '2026-06-20', type: 'أشعة', title: 'أشعة على الرقبة',
+    center: 'مركز الأشعة', status: 'طبيعي', notes: 'لا توجد ملاحظات.',
+  },
+  {
+    id: 'rec3', date: '2026-05-11', type: 'زيارة دكتور', title: 'فحص دوري',
+    center: 'د. أحمد سامي — باطنة', status: 'طبيعي',
+  },
+];
+
+export const seedEquipment: GymEquipment[] = [
+  {
+    id: 'eq1', name: 'Lat Pulldown — سحب أمامي',
+    targetMuscles: ['الظهر (اللاتس)', 'البايسبس', 'الكتف الخلفي'],
+    usageSteps: [
+      'اضبط وسادة الركبة بحيث تثبّت رجلك',
+      'امسك البار أوسع من كتفيك بشوية',
+      'اسحب البار لحد أعلى الصدر وانت شادد ظهرك',
+      'ارجع ببطء من غير ما تسيب المقاومة',
+    ],
+  },
+  {
+    id: 'eq2', name: 'Leg Press — دفع أرجل',
+    targetMuscles: ['الفخذ الأمامي', 'السمانة', 'المؤخرة'],
+    usageSteps: [
+      'اضبط ظهرك على المسند كامل',
+      'حط رجليك بعرض الكتف على المنصة',
+      'انزل ببطء لحد 90 درجة وادفع لفوق',
+    ],
+  },
+];
+
+export const seedWorkoutPlan: WorkoutDay[] = [
+  { dayOfWeek: 4, exercises: [ // خميس
+    { name: 'Lat Pulldown', sets: 4, reps: '10-12', equipmentId: 'eq1' },
+    { name: 'Seated Row', sets: 3, reps: '12' },
+    { name: 'عقلة مساعدة', sets: 3, reps: '8' },
+  ] },
+  { dayOfWeek: 6, exercises: [ // سبت
+    { name: 'Leg Press', sets: 4, reps: '12-15', equipmentId: 'eq2' },
+    { name: 'سكوات بالبار', sets: 4, reps: '8-10' },
+  ] },
+];
+
+export const defaultEmergencyCard: EmergencyCard = {
+  fullName: 'هيثم أحمد',
+  bloodType: 'O+',
+  emergencyContactName: 'والدي',
+  emergencyContactPhone: '01000000000',
+  allergies: ['مكسرات'],
+  currentMeds: ['فيتامين D', 'أوميجا 3'],
+};
+
+export const defaultSettings: AppSettings = {
+  notificationsEnabled: true,
+  medRemindersEnabled: true,
+  healthConnected: false,
+};
 
 export const activityLevels = [
   { emoji: '💻', title: 'مكتبي', sub: 'جالس أغلب اليوم' },

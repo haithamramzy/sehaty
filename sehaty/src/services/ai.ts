@@ -12,7 +12,7 @@
  * function falls back to the deterministic design-accurate mocks, so the
  * app keeps working end-to-end.
  */
-import type { FoodItem, MealType } from '@/data/types';
+import type { FoodItem, GymEquipment, MealType, MedicalRecord } from '@/data/types';
 import { buildContextCard } from '@/db';
 
 export interface MealAnalysis {
@@ -202,6 +202,78 @@ export async function sendChat(
     return { text: 'تمام، سجّلتلك الوجبة 👇', meal };
   }
   return { text: 'تمام، خد بالك تشرب مياه كفاية النهاردة وتنام بدري.' };
+}
+
+/** Identify a gym machine from a photo → name, muscles, usage steps. */
+export async function analyzeGymImage(uri: string): Promise<Omit<GymEquipment, 'id'>> {
+  if (isLive()) {
+    try {
+      const image_base64 = await imageToBase64(uri);
+      if (image_base64) {
+        const out = await callProxy<{ name?: string; target_muscles?: string[]; usage_steps?: string[] }>(
+          '/api/ai/vision/gym', { image_base64 },
+        );
+        if (out.name) {
+          return {
+            name: out.name,
+            targetMuscles: out.target_muscles ?? [],
+            usageSteps: out.usage_steps ?? [],
+            photoUri: uri,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('[ai] live gym-image failed, using mock:', e);
+    }
+  }
+  await wait(1800);
+  return {
+    name: 'Chest Press — دفع صدر',
+    targetMuscles: ['الصدر', 'الترايسبس', 'الكتف الأمامي'],
+    usageSteps: [
+      'اضبط ارتفاع الكرسي بحيث المقابض في مستوى صدرك',
+      'ظهرك ملزوق في المسند طول التمرين',
+      'ادفع للأمام من غير ما تفرد كوعك بالكامل',
+      'ارجع ببطء مع التحكم في المقاومة',
+    ],
+    photoUri: uri,
+  };
+}
+
+/** Extract a prescription / lab report from a photo → medical record draft. */
+export async function analyzeMedicalImage(uri: string): Promise<Omit<MedicalRecord, 'id'>> {
+  if (isLive()) {
+    try {
+      const image_base64 = await imageToBase64(uri);
+      if (image_base64) {
+        const out = await callProxy<any>('/api/ai/vision/medical', { image_base64 });
+        if (out.title || out.type) {
+          return {
+            date: out.date ?? new Date().toISOString().slice(0, 10),
+            type: out.type ?? 'روشتة',
+            title: out.title ?? 'روشتة',
+            center: out.center ?? undefined,
+            status: out.status === 'تحتاج انتباه' ? 'تحتاج انتباه' : 'طبيعي',
+            results: out.results ?? undefined,
+            notes: out.notes ?? undefined,
+            photoUri: uri,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('[ai] live medical-image failed, using mock:', e);
+    }
+  }
+  await wait(1800);
+  return {
+    date: new Date().toISOString().slice(0, 10),
+    type: 'روشتة',
+    title: 'روشتة — د. أحمد سامي',
+    center: 'عيادة باطنة',
+    status: 'طبيعي',
+    notes: 'فيتامين D 1000 وحدة يوميًا مع الغدا لمدة 3 شهور.',
+    photoUri: uri,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

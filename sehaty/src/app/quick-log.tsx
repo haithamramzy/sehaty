@@ -16,10 +16,10 @@ interface Action {
 const ACTIONS: Action[] = [
   { emoji: '🍽', label: 'وجبة', hint: 'صور أو اكتب', bg: tint.warning15, onPress: (go) => go('/meal/method') },
   { emoji: '💧', label: 'مياه', hint: 'كوب أو زجاجة', bg: tint.water15, onPress: (go) => go('/water') },
-  { emoji: '💊', label: 'دوا', hint: 'أكدت الجرعة', bg: tint.ai15 },
+  { emoji: '💊', label: 'دوا', hint: 'أكدت الجرعة', bg: tint.ai15, onPress: (go) => go('/meds') },
   { emoji: '😊', label: 'مزاج', hint: '3 ثواني', bg: tint.primary15, onPress: (go) => go('/mood') },
-  { emoji: '😴', label: 'نوم', hint: 'صحيت النهاردة', bg: 'rgba(184,166,255,0.15)' },
-  { emoji: '🚬', label: 'تدخين / قهوة', hint: 'تتبّع العادات', bg: tint.danger15 },
+  { emoji: '😴', label: 'نوم', hint: 'صحيت النهاردة', bg: 'rgba(184,166,255,0.15)', onPress: (go) => go('/sleep') },
+  { emoji: '🚬', label: 'تدخين / قهوة', hint: 'تتبّع العادات', bg: tint.danger15, onPress: (go) => go('/sleep') },
 ];
 
 /** FAB quick-log bottom sheet (transparentModal route). */

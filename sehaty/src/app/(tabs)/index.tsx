@@ -1,13 +1,24 @@
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 
 import { AiInsight, Card, Icon, ProgressRing, Screen, Txt } from '@/components';
 import { IconButton } from '@/components/TopBar';
 import { useApp } from '@/state/store';
 import { color, radius, space, tint } from '@/theme/tokens';
 
+const WEEKDAYS = ['الأحد', 'الاتنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+
+function formatHours(hours: number): string {
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  return `${h}:${String(m).padStart(2, '0')}`;
+}
+
 export default function Home() {
-  const { profile, caloriesConsumed, waterConsumedMl, meals } = useApp();
+  const router = useRouter();
+  const { profile, caloriesConsumed, waterConsumedMl, meals, lastSleep, meds } = useApp();
 
   const calTarget = profile.calorieTarget;
   const calProgress = caloriesConsumed / calTarget;
@@ -16,9 +27,20 @@ export default function Home() {
   const fat = meals.reduce((s, m) => s + m.fat, 0);
 
   const waterL = waterConsumedMl / 1000;
-  const waterTargetL = profile.waterTargetMl / 1000;
   const waterSegs = 8;
   const filled = Math.round((waterConsumedMl / profile.waterTargetMl) * waterSegs);
+
+  const now = new Date();
+  const greeting = now.getHours() < 12 ? 'صباح الخير' : now.getHours() < 18 ? 'مساء الخير' : 'مساء الخير';
+  const dateLine = `${WEEKDAYS[now.getDay()]}، ${now.getDate()} ${MONTHS[now.getMonth()]}`;
+
+  const sleepHours = lastSleep?.hours ?? null;
+  const sleepBelowTarget = sleepHours !== null && sleepHours < profile.sleepTargetHours;
+  const nextMed = meds.find((m) => m.active && m.timing && m.timing !== 'حسب الحاجة');
+
+  const insight = sleepBelowTarget
+    ? `نومك امبارح كان ${sleepHours!.toFixed(1)} ساعة — أقل من المعتاد. جرّب تنام بدري النهاردة.`
+    : 'يومك ماشي كويس — كمّل تسجيل وجباتك ومياهك عشان التقرير الأسبوعي يبقى أدق.';
 
   return (
     <Screen scroll bottomInset={120}>
@@ -26,18 +48,18 @@ export default function Home() {
       <View style={styles.greet}>
         <View>
           <Txt size={13} c={color.textMuted} style={{ marginBottom: 4 }}>
-            صباح الخير، {profile.name} 👋
+            {greeting}، {profile.name} 👋
           </Txt>
-          <Txt weight="900" size={22} lh={26}>
-            الخميس، 9 يوليو
+          <Txt weight="900" size={22}>
+            {dateLine}
           </Txt>
         </View>
-        <IconButton name="clock" bg={color.surface} tint={color.textSecondary} />
+        <IconButton name="user" bg={color.surface} tint={color.textSecondary} onPress={() => router.push('/settings')} />
       </View>
 
       {/* AI insight */}
       <View style={styles.pad}>
-        <AiInsight text="نومك امبارح كان 5.2 ساعة — أقل من المعتاد. جرّب تنام بدري النهاردة." />
+        <AiInsight text={insight} />
       </View>
 
       {/* Bento grid */}
@@ -67,78 +89,88 @@ export default function Home() {
         </Card>
 
         {/* Water */}
-        <Card style={styles.tile}>
-          <TileHead label="مياه" icon="drop" iconColor={color.water} />
-          <View style={styles.tileNum}>
-            <Txt mono weight="600" size={22}>
-              {waterL.toFixed(1)}
-            </Txt>
-            <Txt mono size={11} c={color.textMuted}>
-              {' '}
-              L
-            </Txt>
-          </View>
-          <View style={styles.segs}>
-            {Array.from({ length: waterSegs }).map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.seg,
-                  { backgroundColor: i < filled ? color.primary : color.elevated, opacity: i === filled - 1 && filled < waterSegs ? 0.6 : 1 },
-                ]}
-              />
-            ))}
-          </View>
-        </Card>
+        <Pressable style={styles.tileWrap} onPress={() => router.push('/water')}>
+          <Card style={styles.tileInner}>
+            <TileHead label="مياه" icon="drop" iconColor={color.water} />
+            <View style={styles.tileNum}>
+              <Txt mono weight="600" size={22}>
+                {waterL.toFixed(1)}
+              </Txt>
+              <Txt mono size={11} c={color.textMuted}>
+                {' '}
+                L
+              </Txt>
+            </View>
+            <View style={styles.segs}>
+              {Array.from({ length: waterSegs }).map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.seg,
+                    { backgroundColor: i < filled ? color.primary : color.elevated, opacity: i === filled - 1 && filled < waterSegs ? 0.6 : 1 },
+                  ]}
+                />
+              ))}
+            </View>
+          </Card>
+        </Pressable>
 
         {/* Sleep */}
-        <Card style={styles.tile}>
-          <TileHead label="النوم" icon="moon" iconColor={color.aiSoft} />
-          <View style={styles.tileNum}>
-            <Txt mono weight="600" size={22}>
-              5:12
+        <Pressable style={styles.tileWrap} onPress={() => router.push('/sleep' as never)}>
+          <Card style={styles.tileInner}>
+            <TileHead label="النوم" icon="moon" iconColor={color.aiSoft} />
+            <View style={styles.tileNum}>
+              <Txt mono weight="600" size={22}>
+                {sleepHours !== null ? formatHours(sleepHours) : '—'}
+              </Txt>
+              {sleepBelowTarget && (
+                <Txt mono size={11} c={color.warning}>
+                  {' '}
+                  ↓
+                </Txt>
+              )}
+            </View>
+            <Txt size={10} c={sleepBelowTarget ? color.warning : color.textMuted} style={{ marginTop: 4 }}>
+              {sleepHours === null ? 'سجّل نومك' : sleepBelowTarget ? 'أقل من هدفك' : 'وصلت هدفك'}
             </Txt>
-            <Txt mono size={11} c={color.warning}>
-              {' '}
-              ↓
-            </Txt>
-          </View>
-          <Txt size={10} c={color.warning} style={{ marginTop: 4 }}>
-            أقل من هدفك
-          </Txt>
-        </Card>
+          </Card>
+        </Pressable>
 
-        {/* Steps */}
-        <Card style={styles.tile}>
-          <TileHead label="خطوات" icon="steps" iconColor={color.primary} />
-          <Txt mono weight="600" size={22} style={{ marginTop: space.sm }}>
-            4,120
-          </Txt>
-          <Txt size={10} c={color.textMuted} style={{ marginTop: 4 }}>
-            من 8,000
-          </Txt>
-        </Card>
+        {/* Steps (sample until Google Health links up — see services/health.ts) */}
+        <Pressable style={styles.tileWrap} onPress={() => router.push('/settings' as never)}>
+          <Card style={styles.tileInner}>
+            <TileHead label="خطوات" icon="steps" iconColor={color.primary} />
+            <Txt mono weight="600" size={22} style={{ marginTop: space.sm }}>
+              4,120
+            </Txt>
+            <Txt size={10} c={color.textMuted} style={{ marginTop: 4 }}>
+              من 8,000
+            </Txt>
+          </Card>
+        </Pressable>
 
         {/* Med alert */}
-        <LinearGradient
-          colors={[tint.warning12, 'rgba(255,181,71,0.04)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.tile, styles.medTile]}
-        >
-          <View style={styles.tileHead}>
-            <Txt size={12} c={color.warning}>
-              دوا قادم
+        <Pressable style={styles.tileWrap} onPress={() => router.push('/meds' as never)}>
+          <LinearGradient
+            colors={[tint.warning12, 'rgba(255,181,71,0.04)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.tileInner, styles.medTile]}
+          >
+            <View style={styles.tileHead}>
+              <Txt size={12} c={color.warning}>
+                دوا قادم
+              </Txt>
+              <Icon name="clock" size={16} color={color.warning} />
+            </View>
+            <Txt weight="700" size={15} style={{ marginTop: 6 }}>
+              {nextMed?.name ?? 'مفيش أدوية نشطة'}
             </Txt>
-            <Icon name="clock" size={16} color={color.warning} />
-          </View>
-          <Txt weight="700" size={15} style={{ marginTop: 6 }}>
-            فيتامين D
-          </Txt>
-          <Txt mono size={11} c={color.warning} style={{ marginTop: 2 }}>
-            14:00 · بعد 45 د
-          </Txt>
-        </LinearGradient>
+            <Txt mono size={11} c={color.warning} style={{ marginTop: 2 }}>
+              {nextMed?.timing ?? 'أضف دوا من هنا'}
+            </Txt>
+          </LinearGradient>
+        </Pressable>
       </View>
     </Screen>
   );
@@ -183,7 +215,8 @@ const styles = StyleSheet.create({
   calNum: { flexDirection: 'row', alignItems: 'baseline', marginTop: 2 },
   macros: { flexDirection: 'row', gap: space.md, marginTop: space.sm },
   macro: { flexDirection: 'row', alignItems: 'center' },
-  tile: { width: '47%', flexGrow: 1, padding: space.lg, minHeight: 96, justifyContent: 'flex-start' },
+  tileWrap: { width: '47%', flexGrow: 1 },
+  tileInner: { padding: space.lg, minHeight: 96, justifyContent: 'flex-start' },
   medTile: { borderWidth: 1, borderColor: tint.warning30, borderRadius: radius.lg, overflow: 'hidden' },
   tileHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   tileNum: { flexDirection: 'row', alignItems: 'baseline', marginTop: space.sm },

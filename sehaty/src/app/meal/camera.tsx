@@ -1,21 +1,66 @@
+import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { Icon, MockPlate, Txt } from '@/components';
+import { upsertMedicalRecord } from '@/db';
+import { analyzeMedicalImage } from '@/services/ai';
 import { captureImage } from '@/services/camera';
 import { color, radius, space } from '@/theme/tokens';
 
-const MODES = ['وجبة', 'جهاز جيم', 'روشتة'];
+type CameraMode = 'meal' | 'gym' | 'medical';
 
-/** Full-screen mock camera. Real capture plugs into services/camera. */
+const MODES: { key: CameraMode; label: string }[] = [
+  { key: 'meal', label: 'وجبة' },
+  { key: 'gym', label: 'جهاز جيم' },
+  { key: 'medical', label: 'روشتة' },
+];
+
+const HINTS: Record<CameraMode, string> = {
+  meal: 'خلي السفرة كلها في الكادر',
+  gym: 'صوّر الجهاز بالكامل',
+  medical: 'خلي الروشتة واضحة في الكادر',
+};
+
+const TITLES: Record<CameraMode, string> = {
+  meal: '📸 تصوير وجبة',
+  gym: '🏋️ تصوير جهاز',
+  medical: '📋 تصوير روشتة',
+};
+
+/** Full-screen mock camera with meal / gym / prescription modes. */
 export default function MealCamera() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const [mode, setMode] = useState<CameraMode>(
+    params.mode === 'gym' || params.mode === 'medical' ? params.mode : 'meal',
+  );
+  const [busy, setBusy] = useState(false);
 
   const shoot = async () => {
-    await captureImage('camera');
-    router.replace('/meal/analyzing?source=photo');
+    if (busy) return;
+    const shot = await captureImage('camera');
+    if (!shot) return;
+
+    if (mode === 'meal') {
+      router.replace('/meal/analyzing?source=photo');
+      return;
+    }
+    if (mode === 'gym') {
+      router.replace(`/gym/analyzing?uri=${encodeURIComponent(shot.uri)}`);
+      return;
+    }
+    // روشتة → analyze inline, save the record, land on the medical log.
+    setBusy(true);
+    try {
+      const analysis = await analyzeMedicalImage(shot.uri);
+      upsertMedicalRecord({ ...analysis, id: `rec-${Date.now()}` });
+      router.replace('/medical');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -30,7 +75,7 @@ export default function MealCamera() {
           </GlassBtn>
           <View style={styles.pill}>
             <Txt size={12} c="#fff">
-              📸 تصوير وجبة
+              {TITLES[mode]}
             </Txt>
           </View>
           <GlassBtn>
@@ -47,20 +92,23 @@ export default function MealCamera() {
             <Corner style={{ bottom: -1, left: -1 }} bl />
           </View>
           <Txt center size={12} c="rgba(255,255,255,0.6)" style={{ marginTop: space.lg }}>
-            خلي السفرة كلها في الكادر
+            {HINTS[mode]}
           </Txt>
         </View>
 
         {/* Bottom controls */}
         <LinearGradient colors={['transparent', 'rgba(0,0,0,0.9)']} style={styles.bottom}>
           <View style={styles.modes}>
-            {MODES.map((m, i) => (
-              <View key={m} style={[styles.mode, i === 0 && styles.modeActive]}>
-                <Txt size={12} weight={i === 0 ? '700' : '400'} c={i === 0 ? color.onPrimary : '#fff'}>
-                  {m}
-                </Txt>
-              </View>
-            ))}
+            {MODES.map((m) => {
+              const active = m.key === mode;
+              return (
+                <Pressable key={m.key} onPress={() => setMode(m.key)} style={[styles.mode, active && styles.modeActive]}>
+                  <Txt size={12} weight={active ? '700' : '400'} c={active ? color.onPrimary : '#fff'}>
+                    {m.label}
+                  </Txt>
+                </Pressable>
+              );
+            })}
           </View>
           <View style={styles.shutterRow}>
             <GlassBtn big>
@@ -75,6 +123,21 @@ export default function MealCamera() {
           </View>
         </LinearGradient>
       </SafeAreaView>
+
+      {/* روشتة analyzing overlay */}
+      {busy && (
+        <View style={styles.busyOverlay}>
+          <View style={styles.busyCore}>
+            <Icon name="spark" size={36} color={color.primary} />
+          </View>
+          <Txt weight="700" size={16} c="#fff" style={{ marginTop: space.xl }}>
+            جاري قراءة الروشتة...
+          </Txt>
+          <Txt size={12} c="rgba(255,255,255,0.6)" style={{ marginTop: 6 }}>
+            التعرّف على المحتوى…
+          </Txt>
+        </View>
+      )}
     </View>
   );
 }
@@ -139,4 +202,23 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   shutterInner: { flex: 1, borderRadius: 40, backgroundColor: '#fff' },
+  busyOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(10,10,12,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  busyCore: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    borderWidth: 2,
+    borderColor: 'rgba(206,253,130,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

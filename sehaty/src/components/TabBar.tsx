@@ -11,6 +11,7 @@ import { Txt } from './Txt';
 /** Maps our real tab route names to labels/icons. */
 const TAB_META: Record<string, { label: string; icon: IconName }> = {
   index: { label: 'الرئيسية', icon: 'home' },
+  log: { label: 'السجل', icon: 'list' },
   chat: { label: 'الشات', icon: 'chat' },
   reports: { label: 'التقارير', icon: 'chart' },
 };
@@ -31,7 +32,7 @@ interface TabBarProps {
 /**
  * Glassmorphic bottom navigation with a central raised FAB.
  * Slots (start→end in RTL): الرئيسية · السجل · [ + FAB ] · الشات · التقارير.
- * السجل → water log, FAB → quick-log sheet, rest are real tabs.
+ * FAB → quick-log sheet; the rest are real tabs.
  */
 export function TabBar({ state, navigation }: TabBarProps) {
   const router = useRouter();
@@ -55,9 +56,9 @@ export function TabBar({ state, navigation }: TabBarProps) {
           onPress={() => go('index')}
         />
         <TabItem
-          meta={{ label: 'السجل', icon: 'list' }}
-          active={false}
-          onPress={() => router.push('/water')}
+          meta={TAB_META.log}
+          active={activeName === 'log'}
+          onPress={() => go('log')}
         />
 
         {/* Center FAB */}

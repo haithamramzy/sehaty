@@ -10,8 +10,15 @@
  */
 import { Platform } from 'react-native';
 
-import { defaultProfile, seedChat, seedMeals, seedWater } from '@/data/mock';
-import type { ChatMessage, Meal, MoodLevel, UserProfile, WaterEntry } from '@/data/types';
+import {
+  defaultProfile, seedChat, seedEquipment, seedMedicalRecords, seedMeds, seedMeals,
+  seedSleep, seedWater, seedWorkoutPlan,
+} from '@/data/mock';
+import type {
+  AppSettings, ChatMessage, DaySummary, EmergencyCard, GymEquipment, Meal, MedIntake,
+  MedicalRecord, MedicalRecordType, Medication, MoodLevel, SleepEntry, UserProfile,
+  WaterEntry, WorkoutDay,
+} from '@/data/types';
 
 import { CREATE_INDEXES, CREATE_TABLES, SCHEMA_VERSION } from './schema';
 
@@ -84,6 +91,41 @@ async function seedFirstRun(db: SQLiteDatabase): Promise<void> {
         c.card ? JSON.stringify(c.card) : null,
       );
     }
+    for (const m of seedMeds) {
+      await db.runAsync(
+        `INSERT OR IGNORE INTO medication_logs (id, name, dosage, type, start_date, end_date, active, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'manual')`,
+        m.id, m.name, [m.dosage ?? '', m.timing ?? ''].join('|'), m.kind,
+        m.startDate ?? null, m.endDate ?? null, m.active ? 1 : 0,
+      );
+    }
+    for (const s of seedSleep) {
+      await db.runAsync(
+        `INSERT OR IGNORE INTO sleep_logs (id, date, hours, quality_score, last_coffee_time, last_cigarette_time, source)
+         VALUES (?, ?, ?, ?, ?, ?, 'manual')`,
+        s.id, s.date, s.hours, s.quality, s.lastCoffeeTime ?? null, s.lastCigaretteTime ?? null,
+      );
+    }
+    for (const rec of seedMedicalRecords) {
+      await db.runAsync(
+        `INSERT OR IGNORE INTO medical_records (id, date, type, extracted_data_json, photo_path) VALUES (?, ?, ?, ?, ?)`,
+        rec.id, rec.date, rec.type,
+        JSON.stringify({ title: rec.title, center: rec.center, status: rec.status, results: rec.results, notes: rec.notes }),
+        null,
+      );
+    }
+    for (const eq of seedEquipment) {
+      await db.runAsync(
+        `INSERT OR IGNORE INTO gym_equipment (id, name, target_muscles, usage_instructions, photo_path) VALUES (?, ?, ?, ?, ?)`,
+        eq.id, eq.name, JSON.stringify(eq.targetMuscles), JSON.stringify(eq.usageSteps), null,
+      );
+    }
+    for (const day of seedWorkoutPlan) {
+      await db.runAsync(
+        `INSERT OR IGNORE INTO workout_plans (id, day_of_week, exercises_json) VALUES (?, ?, ?)`,
+        `wp-${day.dayOfWeek}`, day.dayOfWeek, JSON.stringify(day.exercises),
+      );
+    }
   });
 }
 
@@ -105,6 +147,13 @@ export interface DbSnapshot {
   water: WaterEntry[];
   mood: MoodLevel | null;
   chat: ChatMessage[];
+  meds: Medication[];
+  todayIntakes: MedIntake[];
+  sleepWeek: SleepEntry[];
+  equipment: GymEquipment[];
+  workoutPlan: WorkoutDay[];
+  emergencyCard: EmergencyCard | null;
+  settings: AppSettings | null;
 }
 
 export async function loadSnapshot(): Promise<DbSnapshot | null> {
@@ -128,8 +177,32 @@ export async function loadSnapshot(): Promise<DbSnapshot | null> {
   const chatRows = await db.getAllAsync<any>(
     'SELECT * FROM chat_messages ORDER BY ts ASC LIMIT 200',
   );
+  const medRows = await db.getAllAsync<any>('SELECT * FROM medication_logs ORDER BY active DESC, name');
+  const intakeRows = await db.getAllAsync<any>('SELECT * FROM med_intake_logs WHERE date = ? ORDER BY ts', date);
+  const sleepRows = await db.getAllAsync<any>('SELECT * FROM sleep_logs ORDER BY date DESC LIMIT 7');
+  const equipmentRows = await db.getAllAsync<any>('SELECT * FROM gym_equipment ORDER BY name');
+  const planRows = await db.getAllAsync<any>('SELECT * FROM workout_plans ORDER BY day_of_week');
+  const emergencyRow = await db.getFirstAsync<{ value: string }>(
+    `SELECT value FROM app_meta WHERE key = 'emergency_card'`,
+  );
+  const settingsRow = await db.getFirstAsync<{ value: string }>(
+    `SELECT value FROM app_meta WHERE key = 'app_settings'`,
+  );
 
   return {
+    meds: medRows.map(mapMed),
+    todayIntakes: intakeRows.map((r) => ({ id: r.id, medId: r.med_id, medName: r.med_name, date: r.date, at: r.at })),
+    sleepWeek: sleepRows.map(mapSleep),
+    equipment: equipmentRows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      targetMuscles: JSON.parse(r.target_muscles ?? '[]'),
+      usageSteps: JSON.parse(r.usage_instructions ?? '[]'),
+      photoUri: r.photo_path ?? undefined,
+    })),
+    workoutPlan: planRows.map((r) => ({ dayOfWeek: r.day_of_week, exercises: JSON.parse(r.exercises_json ?? '[]') })),
+    emergencyCard: emergencyRow ? JSON.parse(emergencyRow.value) : null,
+    settings: settingsRow ? JSON.parse(settingsRow.value) : null,
     profile: profileRow
       ? {
           name: profileRow.name,
@@ -270,6 +343,282 @@ export function saveWeeklySummary(weekStartDate: string, summaryJson: object): v
     ),
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sleep
+// ─────────────────────────────────────────────────────────────────────────────
+
+function mapSleep(r: any): SleepEntry {
+  return {
+    id: r.id,
+    date: r.date,
+    hours: r.hours ?? 0,
+    quality: r.quality_score ?? null,
+    lastCoffeeTime: r.last_coffee_time ?? undefined,
+    lastCigaretteTime: r.last_cigarette_time ?? undefined,
+    source: r.source === 'health' ? 'health' : 'manual',
+  };
+}
+
+export function upsertSleep(entry: SleepEntry): void {
+  persist((db) =>
+    db.runAsync(
+      `INSERT INTO sleep_logs (id, date, hours, quality_score, last_coffee_time, last_cigarette_time, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         hours = excluded.hours, quality_score = excluded.quality_score,
+         last_coffee_time = excluded.last_coffee_time,
+         last_cigarette_time = excluded.last_cigarette_time, source = excluded.source`,
+      entry.id, entry.date, entry.hours, entry.quality, entry.lastCoffeeTime ?? null,
+      entry.lastCigaretteTime ?? null, entry.source,
+    ),
+  );
+}
+
+export async function getSleepLastDays(days = 7): Promise<SleepEntry[]> {
+  if (!isNative) return [];
+  const db = await getDb();
+  const rows = await db.getAllAsync<any>(
+    'SELECT * FROM sleep_logs ORDER BY date DESC LIMIT ?', days,
+  );
+  return rows.map(mapSleep);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Medications + intakes
+// ─────────────────────────────────────────────────────────────────────────────
+
+function mapMed(r: any): Medication {
+  const [dosage, timing] = String(r.dosage ?? '').split('|');
+  return {
+    id: r.id,
+    name: r.name,
+    dosage: dosage || undefined,
+    kind: r.type === 'مكمل' ? 'مكمل' : 'دواء',
+    timing: timing || undefined,
+    startDate: r.start_date ?? undefined,
+    endDate: r.end_date ?? undefined,
+    active: !!r.active,
+    note: undefined,
+  };
+}
+
+export function upsertMedication(m: Medication): void {
+  persist((db) =>
+    db.runAsync(
+      `INSERT INTO medication_logs (id, name, dosage, type, start_date, end_date, active, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'manual')
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name, dosage = excluded.dosage, type = excluded.type,
+         start_date = excluded.start_date, end_date = excluded.end_date, active = excluded.active`,
+      m.id, m.name, [m.dosage ?? '', m.timing ?? ''].join('|'), m.kind,
+      m.startDate ?? null, m.endDate ?? null, m.active ? 1 : 0,
+    ),
+  );
+}
+
+export async function listMedications(): Promise<Medication[]> {
+  if (!isNative) return [];
+  const db = await getDb();
+  const rows = await db.getAllAsync<any>('SELECT * FROM medication_logs ORDER BY active DESC, name');
+  return rows.map(mapMed);
+}
+
+export function insertMedIntake(intake: MedIntake): void {
+  persist((db) =>
+    db.runAsync(
+      `INSERT INTO med_intake_logs (id, med_id, med_name, ts, date, at) VALUES (?, ?, ?, ?, ?, ?)`,
+      intake.id, intake.medId, intake.medName, Date.now(), intake.date, intake.at,
+    ),
+  );
+}
+
+export async function getIntakesForDate(date: string): Promise<MedIntake[]> {
+  if (!isNative) return [];
+  const db = await getDb();
+  const rows = await db.getAllAsync<any>('SELECT * FROM med_intake_logs WHERE date = ? ORDER BY ts', date);
+  return rows.map((r) => ({ id: r.id, medId: r.med_id, medName: r.med_name, date: r.date, at: r.at }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Medical records
+// ─────────────────────────────────────────────────────────────────────────────
+
+function mapRecord(r: any): MedicalRecord {
+  const extra = r.extracted_data_json ? JSON.parse(r.extracted_data_json) : {};
+  return {
+    id: r.id,
+    date: r.date,
+    type: r.type,
+    title: extra.title ?? r.type,
+    center: extra.center ?? undefined,
+    status: extra.status === 'تحتاج انتباه' ? 'تحتاج انتباه' : 'طبيعي',
+    results: extra.results ?? undefined,
+    notes: extra.notes ?? undefined,
+    photoUri: r.photo_path ?? undefined,
+  };
+}
+
+export function upsertMedicalRecord(rec: MedicalRecord): void {
+  const extra = JSON.stringify({
+    title: rec.title, center: rec.center, status: rec.status,
+    results: rec.results, notes: rec.notes,
+  });
+  persist((db) =>
+    db.runAsync(
+      `INSERT INTO medical_records (id, date, type, extracted_data_json, photo_path)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         date = excluded.date, type = excluded.type,
+         extracted_data_json = excluded.extracted_data_json, photo_path = excluded.photo_path`,
+      rec.id, rec.date, rec.type, extra, rec.photoUri ?? null,
+    ),
+  );
+}
+
+export async function listMedicalRecords(filter?: {
+  sinceDate?: string;
+  type?: MedicalRecordType;
+  needsAttention?: boolean;
+}): Promise<MedicalRecord[]> {
+  if (!isNative) return [];
+  const db = await getDb();
+  const where: string[] = [];
+  const params: any[] = [];
+  if (filter?.sinceDate) { where.push('date >= ?'); params.push(filter.sinceDate); }
+  if (filter?.type) { where.push('type = ?'); params.push(filter.type); }
+  const rows = await db.getAllAsync<any>(
+    `SELECT * FROM medical_records ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY date DESC`,
+    ...params,
+  );
+  let records = rows.map(mapRecord);
+  if (filter?.needsAttention !== undefined) {
+    records = records.filter((r) => (r.status === 'تحتاج انتباه') === filter.needsAttention);
+  }
+  return records;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Gym equipment + workout plan
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function upsertEquipment(eq: GymEquipment): void {
+  persist((db) =>
+    db.runAsync(
+      `INSERT INTO gym_equipment (id, name, target_muscles, usage_instructions, photo_path)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name, target_muscles = excluded.target_muscles,
+         usage_instructions = excluded.usage_instructions, photo_path = excluded.photo_path`,
+      eq.id, eq.name, JSON.stringify(eq.targetMuscles), JSON.stringify(eq.usageSteps), eq.photoUri ?? null,
+    ),
+  );
+}
+
+export async function listEquipment(): Promise<GymEquipment[]> {
+  if (!isNative) return [];
+  const db = await getDb();
+  const rows = await db.getAllAsync<any>('SELECT * FROM gym_equipment ORDER BY name');
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    targetMuscles: JSON.parse(r.target_muscles ?? '[]'),
+    usageSteps: JSON.parse(r.usage_instructions ?? '[]'),
+    photoUri: r.photo_path ?? undefined,
+  }));
+}
+
+export function upsertWorkoutDay(day: WorkoutDay): void {
+  persist((db) =>
+    db.runAsync(
+      `INSERT INTO workout_plans (id, day_of_week, exercises_json) VALUES (?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET exercises_json = excluded.exercises_json`,
+      `wp-${day.dayOfWeek}`, day.dayOfWeek, JSON.stringify(day.exercises),
+    ),
+  );
+}
+
+export async function getWorkoutPlan(): Promise<WorkoutDay[]> {
+  if (!isNative) return [];
+  const db = await getDb();
+  const rows = await db.getAllAsync<any>('SELECT * FROM workout_plans ORDER BY day_of_week');
+  return rows.map((r) => ({ dayOfWeek: r.day_of_week, exercises: JSON.parse(r.exercises_json ?? '[]') }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Calendar day summaries
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Aggregate per-day stats for a month ('YYYY-MM'). Keyed by date. */
+export async function getMonthSummaries(monthPrefix: string, kcalTarget: number): Promise<Record<string, DaySummary>> {
+  if (!isNative) return {};
+  const db = await getDb();
+  const like = `${monthPrefix}%`;
+  const meals = await db.getAllAsync<any>(
+    'SELECT date, SUM(total_calories) AS kcal FROM meal_logs WHERE date LIKE ? GROUP BY date', like,
+  );
+  const water = await db.getAllAsync<any>(
+    'SELECT date, SUM(amount_ml) AS ml FROM water_logs WHERE date LIKE ? GROUP BY date', like,
+  );
+  const moods = await db.getAllAsync<any>(
+    'SELECT date, AVG(score) AS score FROM mood_logs WHERE date LIKE ? GROUP BY date', like,
+  );
+  const sleeps = await db.getAllAsync<any>(
+    'SELECT date, hours FROM sleep_logs WHERE date LIKE ?', like,
+  );
+  const intakes = await db.getAllAsync<any>(
+    'SELECT * FROM med_intake_logs WHERE date LIKE ? ORDER BY ts', like,
+  );
+
+  const out: Record<string, DaySummary> = {};
+  const ensure = (date: string): DaySummary =>
+    (out[date] ??= {
+      date, status: 'empty', kcal: 0, kcalTarget, waterMl: 0, mood: null, sleepHours: null, medsTaken: [],
+    });
+
+  for (const m of meals) ensure(m.date).kcal = Math.round(m.kcal ?? 0);
+  for (const w of water) ensure(w.date).waterMl = Math.round(w.ml ?? 0);
+  for (const mo of moods) ensure(mo.date).mood = Math.round((mo.score ?? 0) * 10) / 10;
+  for (const s of sleeps) ensure(s.date).sleepHours = s.hours ?? null;
+  for (const i of intakes) ensure(i.date).medsTaken.push({ id: i.id, medId: i.med_id, medName: i.med_name, date: i.date, at: i.at });
+
+  for (const d of Object.values(out)) {
+    const signals = [
+      d.kcal > 0 && d.kcal <= d.kcalTarget * 1.05,
+      d.waterMl >= 2000,
+      (d.mood ?? 0) >= 4,
+      (d.sleepHours ?? 0) >= 6.5,
+    ].filter(Boolean).length;
+    const hasData = d.kcal > 0 || d.waterMl > 0 || d.mood !== null || d.sleepHours !== null || d.medsTaken.length > 0;
+    d.status = !hasData ? 'empty' : signals >= 2 ? 'good' : 'mid';
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Settings / emergency card (app_meta JSON blobs)
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function getMeta<T>(key: string): Promise<T | null> {
+  if (!isNative) return null;
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM app_meta WHERE key = ?', key);
+  return row ? (JSON.parse(row.value) as T) : null;
+}
+
+function setMeta(key: string, value: unknown): void {
+  persist((db) =>
+    db.runAsync(
+      `INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      key, JSON.stringify(value),
+    ),
+  );
+}
+
+export const getEmergencyCard = () => getMeta<EmergencyCard>('emergency_card');
+export const saveEmergencyCard = (c: EmergencyCard) => setMeta('emergency_card', c);
+export const getSettings = () => getMeta<AppSettings>('app_settings');
+export const saveSettings = (s: AppSettings) => setMeta('app_settings', s);
 
 /** Latest weekly memory summary + last-7-days raw rows → the AI "context card". */
 export async function buildContextCard(): Promise<object | null> {
