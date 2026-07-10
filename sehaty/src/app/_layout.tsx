@@ -1,4 +1,5 @@
-import { I18nManager } from 'react-native';
+import React from 'react';
+import { I18nManager, ScrollView, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
@@ -29,6 +30,44 @@ if (!I18nManager.isRTL) {
 
 SplashScreen.preventAutoHideAsync();
 
+/**
+ * Release builds kill the app on any unhandled startup error, which reads as
+ * "opens then closes" with no trace. This boundary keeps the app alive and
+ * puts the real error text on screen so it can be reported.
+ */
+class StartupErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch() {
+    SplashScreen.hideAsync().catch(() => {});
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <ScrollView style={{ flex: 1, backgroundColor: '#0F0F11' }} contentContainerStyle={{ padding: 24, paddingTop: 80 }}>
+          <Text style={{ color: '#FF5C5C', fontSize: 18, fontWeight: 'bold', marginBottom: 12 }}>
+            حصل خطأ عند تشغيل التطبيق — صوّر الشاشة دي وابعتها
+          </Text>
+          <Text style={{ color: '#D4D4D8', fontSize: 13, fontFamily: 'monospace' }}>
+            {String(this.state.error?.message ?? this.state.error)}
+            {'\n\n'}
+            {String(this.state.error?.stack ?? '').slice(0, 2000)}
+          </Text>
+        </ScrollView>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function RootLayout() {
   const [loaded] = useFonts({
     Cairo_400Regular,
@@ -49,7 +88,8 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: color.bg }}>
-      <SafeAreaProvider>
+      <StartupErrorBoundary>
+        <SafeAreaProvider>
         <AppProvider>
           <StatusBar style="light" />
           <Stack
@@ -68,7 +108,8 @@ export default function RootLayout() {
             <Stack.Screen name="quick-log" options={{ presentation: 'transparentModal', animation: 'fade' }} />
           </Stack>
         </AppProvider>
-      </SafeAreaProvider>
+        </SafeAreaProvider>
+      </StartupErrorBoundary>
     </GestureHandlerRootView>
   );
 }
