@@ -1,0 +1,59 @@
+name: Build صحّتي APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/sehaty-app, main, master]
+    paths:
+      - 'sehaty/**'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: write # attach the APK to a release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sehaty
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: sehaty/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate native Android project (expo prebuild)
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Build release APK
+        # Expo's template signs release builds with the bundled debug keystore —
+        # exactly what we want for a personal sideload APK (no Play Store).
+        run: cd android && ./gradlew assembleRelease --no-daemon
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk sehaty.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sehaty-apk
+          path: sehaty/sehaty.apk
+
+      - name: Publish to the apk-latest release (stable download URL)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-latest
+          name: 'صحّتي — أحدث APK تجريبي'
+          body: 'آخر بناء تلقائي من الفرع. حمّل sehaty.apk وثبّته مباشرة (فعّل "التثبيت من مصادر غير معروفة").'
+          files: sehaty/sehaty.apk
